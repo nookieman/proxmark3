@@ -1566,6 +1566,21 @@ static int GetIso14443aAnswerFromTag(uint8_t *receivedResponse, uint16_t offset,
 	}
 }
 
+void ReaderSendRawIso14443a(int length, byte_t *data) {
+    int bytes_received;
+    uint8_t *response = (((uint8_t *)BigBuf) + FREE_BUFFER_OFFSET);
+    iso14443a_setup(FPGA_HF_ISO14443A_READER_LISTEN);
+    ReaderTransmitBitsPar(data, length*8, 0, NULL);
+    bytes_received = ReaderReceive(response);
+    if(bytes_received) {
+        cmd_send(CMD_ACK, bytes_received, 0, 0, response, bytes_received);
+    } else {
+        char *error_string = "Unable to receive response.";
+        int error_string_length = strlen(error_string);
+        cmd_send(CMD_NACK, error_string_length, 0, 0, error_string, error_string_length);
+    }
+}
+
 void ReaderTransmitBitsPar(uint8_t* frame, int bits, uint32_t par, uint32_t *timing)
 {
 
