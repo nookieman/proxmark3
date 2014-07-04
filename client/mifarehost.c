@@ -8,12 +8,15 @@
 // mifare commands
 //-----------------------------------------------------------------------------
 
+#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h> 
+#include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include "mifarehost.h"
 #include "proxmark3.h"
+
+extern int errno;
 
 // MIFARE
 int compar_int(const void * a, const void * b) {
@@ -322,8 +325,11 @@ int isTraceCardEmpty(void) {
 }
 
 int isBlockEmpty(int blockN) {
-	for (int i = 0; i < 16; i++) 
-		if (traceCard[blockN * 16 + i] != 0) return 0;
+	for (int i = 0; i < 16; i++) {
+		if (traceCard[blockN * 16 + i] != 0) {
+            return 0;
+        }
+    }
 
 	return 1;
 }
@@ -338,35 +344,45 @@ int loadTraceCard(uint8_t *tuid) {
 	uint8_t buf8[64];
 	int i, blockNum;
 	
-	if (!isTraceCardEmpty()) saveTraceCard();
+	if (!isTraceCardEmpty()) {
+        PrintAndLog("Trace card is not empty, saving it now.");
+        saveTraceCard();
+    }
 	memset(traceCard, 0x00, 4096);
 	memcpy(traceCard, tuid + 3, 4);
 	FillFileNameByUID(traceFileName, tuid, ".eml", 7);
 
 	f = fopen(traceFileName, "r");
-	if (!f) return 1;
+	if (!f) {
+        PrintAndLog("Error while opening trace file '%s' for reading: %s", traceFileName, strerror(errno));
+        return 1;
+    }
 	
 	blockNum = 0;
-	while(!feof(f)){
-		memset(buf, 0, sizeof(buf));
-		if (fgets(buf, sizeof(buf), f) == NULL) {
-      PrintAndLog("File reading error.");
+	//while(!feof(f)) {
+    while (fgets(buf, sizeof(buf), f)) {
+		if (ferror(f)) {
+            PrintAndLog("File reading error in trace file '%s'.", traceFileName);
 			return 2;
-    }
+        }
 
 		if (strlen(buf) < 32){
 			if (feof(f)) break;
 			PrintAndLog("File content error. Block data must include 32 HEX symbols");
 			return 2;
 		}
-		for (i = 0; i < 32; i += 2)
+		for (i = 0; i < 32; i += 2) {
 			sscanf(&buf[i], "%02x", (unsigned int *)&buf8[i / 2]);
+        }
 
 		memcpy(traceCard + blockNum * 16, buf8, 16);
 
+		memset(buf, 0, sizeof(buf));
 		blockNum++;
 	}
-	fclose(f);
+    if (fclose(f) != 0) {
+        PrintAndLog("Error upon closing trace file '%s': %s", traceFileName, strerror(errno));
+    }
 
 	return 0;
 }
@@ -374,15 +390,26 @@ int loadTraceCard(uint8_t *tuid) {
 int saveTraceCard(void) {
 	FILE * f;
 	
-	if ((!strlen(traceFileName)) || (isTraceCardEmpty())) return 0;
+    PrintAndLog("saveTraceCard()");
+	if ((!strlen(traceFileName)) || (isTraceCardEmpty())) {
+        PrintAndLog("saveTraceCard(): strlen(traceFileName) == 0 or isTraceCardEmpty()");
+        return 0;
+    }
 	
 	f = fopen(traceFileName, "w+");
-	for (int i = 0; i < 64; i++) {  // blocks
-		for (int j = 0; j < 16; j++)  // bytes
-			fprintf(f, "%02x", *(traceCard + i * 16 + j)); 
-		fprintf(f,"\n");
-	}
-	fclose(f);
+    if (f != NULL) {
+        for (int i = 0; i < 64; i++) {  // blocks
+            for (int j = 0; j < 16; j++)  // bytes
+                fprintf(f, "%02x", *(traceCard + i * 16 + j)); 
+            fprintf(f,"\n");
+        }
+        if (fclose(f) != 0) {
+            PrintAndLog("Error upon closing trace file '%s': %s", traceFileName, strerror(errno));
+        }
+    } else {
+        PrintAndLog("Error while opening trace file '%s' for writing: %s", traceFileName, strerror(errno));
+        //return 1;
+    }
 
 	return 0;
 }

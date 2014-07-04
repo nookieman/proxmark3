@@ -1879,6 +1879,9 @@ int CmdHF14AMfSniff(const char *Cmd){
 	
 	printf("-------------------------------------------------------------------------\n");
 	printf("Executing command. \n");
+    printf("Log to file: %s\n", wantLogToFile ? "Enabled" : "Disabled");
+    printf("Decryption: %s\n", wantDecrypt ? "Enabled" : "Disabled");
+    printf("Save to eml: %s\n", wantSaveToEmlFile ? "Enabled" : "Disabled");
 	printf("Press the key on the proxmark3 device to abort both proxmark3 and client.\n");
 	printf("Press the key on pc keyboard to abort the client.\n");
 	printf("-------------------------------------------------------------------------\n");
@@ -1935,7 +1938,7 @@ int CmdHF14AMfSniff(const char *Cmd){
 						if (wantLogToFile || wantDecrypt) {
 							FillFileNameByUID(logHexFileName, uid, ".log", 7);
 							AddLogCurrentDT(logHexFileName);
-						}						
+						}
 						if (wantDecrypt) mfTraceInit(uid, atqa, sak, wantSaveToEmlFile);
 					} else {
 						PrintAndLog("%s(%d):%s", isTag ? "TAG":"RDR", num, sprint_hex(bufPtr, len));

@@ -93,7 +93,7 @@ static void *uart_receiver(void *targ) {
         continue;
       }
       cmd_count = (prx-rx) / sizeof(UsbCommand);
-      //      printf("received %d bytes, which represents %d commands\n",(prx-rx), cmd_count);
+            printf("received %d bytes, which represents %d commands\n",(prx-rx), cmd_count);
       for (size_t i=0; i<cmd_count; i++) {
         UsbCommandReceived((UsbCommand*)(rx+(i*sizeof(UsbCommand))));
       }
