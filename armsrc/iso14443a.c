@@ -2801,7 +2801,7 @@ void ReaderSendRawIso14443a(int length_bytes, int length_bits, int flags, byte_t
         int error_string_length = strlen(error_string);
         cmd_send(CMD_NACK, error_string_length, 0, 0, error_string, error_string_length);
     }
-   Dbprintf("atqa: %02x %02x", response[0], response[1]);
+//   Dbprintf("atqa: %02x %02x", response[0], response[1]);
 
 
 /*    //data[0] = 0x52;
