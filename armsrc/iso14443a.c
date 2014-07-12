@@ -1565,22 +1565,6 @@ static int GetIso14443aAnswerFromTag(uint8_t *receivedResponse, uint16_t offset,
 		}
 	}
 }
-
-void ReaderSendRawIso14443a(int length, byte_t *data) {
-    int bytes_received;
-    uint8_t *response = (((uint8_t *)BigBuf) + FREE_BUFFER_OFFSET);
-    iso14443a_setup(FPGA_HF_ISO14443A_READER_LISTEN);
-    ReaderTransmitBitsPar(data, length*8, 0, NULL);
-    bytes_received = ReaderReceive(response);
-    if(bytes_received) {
-        cmd_send(CMD_ACK, bytes_received, 0, 0, response, bytes_received);
-    } else {
-        char *error_string = "Unable to receive response.";
-        int error_string_length = strlen(error_string);
-        cmd_send(CMD_NACK, error_string_length, 0, 0, error_string, error_string_length);
-    }
-}
-
 void ReaderTransmitBitsPar(uint8_t* frame, int bits, uint32_t par, uint32_t *timing)
 {
 
@@ -2780,3 +2764,60 @@ void RAMFUNC SniffMifare(uint8_t param) {
 	Dbprintf("maxDataLen=%x, Uart.state=%x, Uart.len=%x", maxDataLen, Uart.state, Uart.len);
 	LEDsoff();
 }
+
+void ReaderSendRawIso14443a(int length_bytes, int length_bits, int flags, byte_t *data) {
+    int bytes_received = 0;
+    uint16_t receive_offset = 0;
+    uint32_t parity = 0;
+    uint8_t* response = (((uint8_t *)BigBuf) + FREE_BUFFER_OFFSET); // was 3560 - tied to other size changes
+    int length_combined = length_bytes * 8 + length_bits;
+
+    iso14a_clear_trace();
+    iso14a_set_tracing(TRUE);
+    iso14443a_setup(FPGA_HF_ISO14443A_READER_MOD);
+
+    if(flags & ISO14A_RAW_PARITY) {
+//        DbpString("PARITY");
+        parity = GetParity(data, length_combined/8);
+//    } else {
+//        DbpString("no PARITY");
+    }
+//    Dbprintf("parity: %02x", parity);
+
+    ReaderTransmitBitsPar(data, length_combined, parity, NULL);
+
+    if(flags & ISO14A_RAW_RECEIVE_OFFSET) {
+//        DbpString("RECEIVE_OFFSET");
+        receive_offset = length_combined % 8;
+        bytes_received = ReaderReceiveOffset(response, receive_offset);
+    } else {
+//        DbpString("no RECEIVE_OFFSET");
+        bytes_received = ReaderReceive(response);
+    }
+    if(bytes_received) {
+        cmd_send(CMD_ACK, bytes_received, Demod.collisionPos, 0, response, bytes_received);
+    } else {
+        char *error_string = "Unable to receive response.";
+        int error_string_length = strlen(error_string);
+        cmd_send(CMD_NACK, error_string_length, 0, 0, error_string, error_string_length);
+    }
+   Dbprintf("atqa: %02x %02x", response[0], response[1]);
+
+
+/*    //data[0] = 0x52;
+    uint8_t wupa[] = { 0x52 };
+    ReaderTransmitBitsPar(wupa, 7, 0, NULL);
+    //ReaderTransmitBitsPar(data, length_combined, 0, NULL);
+    bytes_received = ReaderReceive(response);
+    if(bytes_received) {
+        cmd_send(CMD_ACK, bytes_received, 0, 0, response, bytes_received);
+    } else {
+        char *error_string = "Unable to receive response.";
+        int error_string_length = strlen(error_string);
+        cmd_send(CMD_NACK, error_string_length, 0, 0, error_string, error_string_length);
+    }
+*/
+    //FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+    //LEDsoff();
+}
+

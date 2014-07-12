@@ -36,4 +36,9 @@ typedef enum ISO14A_COMMAND {
 	ISO14A_NO_SELECT = 0x80
 } iso14a_command_t;
 
+typedef enum ISO14A_RAW_FLAGS {
+    ISO14A_RAW_PARITY = 1,
+    ISO14A_RAW_RECEIVE_OFFSET = 2
+} iso14a_raw_flags_t;
+
 #endif // _MIFARE_H_
