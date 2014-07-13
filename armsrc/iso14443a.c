@@ -2765,30 +2765,47 @@ void RAMFUNC SniffMifare(uint8_t param) {
 	LEDsoff();
 }
 
-void ReaderSendRawIso14443a(int length_bytes, int length_bits, int flags, byte_t *data) {
+void ReaderSendRawIso14443a(int length, int flags, byte_t *data) {
     int bytes_received = 0;
     uint16_t receive_offset = 0;
     uint32_t parity = 0;
     uint8_t* response = (((uint8_t *)BigBuf) + FREE_BUFFER_OFFSET); // was 3560 - tied to other size changes
-    int length_combined = length_bytes * 8 + length_bits;
+    int length_bits = length;
+    // calculate effective size in bits depending on flags
+    if(! (flags & ISO14A_RAW_LENGTH_IN_BITS)) {
+         length_bits = length * 8;
+    }
 
     iso14a_clear_trace();
     iso14a_set_tracing(TRUE);
     iso14443a_setup(FPGA_HF_ISO14443A_READER_MOD);
 
+    // append crc if command defines it
+    if(flags & ISO14A_RAW_APPEND_CRC) {
+        DbpString("Appending CRC");
+        uint32_t offset = length_bits / 8;
+        if(length_bits % 8) {
+            offset += 1;
+        }
+        length_bits += 16;
+        AppendCrc14443a(data, offset);
+    }
+
+    // set parity according to flag of command
     if(flags & ISO14A_RAW_PARITY) {
 //        DbpString("PARITY");
-        parity = GetParity(data, length_combined/8);
+        parity = GetParity(data, length_bits/8);
 //    } else {
 //        DbpString("no PARITY");
     }
 //    Dbprintf("parity: %02x", parity);
 
-    ReaderTransmitBitsPar(data, length_combined, parity, NULL);
+    ReaderTransmitBitsPar(data, length_bits, parity, NULL);
 
+    // in anticollision the reader may have to receive at an offset
     if(flags & ISO14A_RAW_RECEIVE_OFFSET) {
 //        DbpString("RECEIVE_OFFSET");
-        receive_offset = length_combined % 8;
+        receive_offset = length_bits % 8;
         bytes_received = ReaderReceiveOffset(response, receive_offset);
     } else {
 //        DbpString("no RECEIVE_OFFSET");
