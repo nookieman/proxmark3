@@ -2765,6 +2765,22 @@ void RAMFUNC SniffMifare(uint8_t param) {
 	LEDsoff();
 }
 
+void TagReceiveRawIso14443a() {
+    int length;
+    uint8_t* command = (((uint8_t *)BigBuf) + RECV_CMD_OFFSET);
+    iso14a_clear_trace();
+    iso14a_set_tracing(TRUE);
+    iso14443a_setup(FPGA_HF_ISO14443A_TAGSIM_LISTEN);
+    if (GetIso14443aCommandFromReader(command, &length, RECV_CMD_SIZE)) {
+        cmd_send(CMD_ACK, length, 0, 0, command, length);
+    } else {
+        char *error_string = "Unable to receive from reader.";
+        int error_string_length = strlen(error_string);
+        cmd_send(CMD_NACK, error_string_length, 0, 0, error_string, error_string_length);
+    }
+//    LEDsoff();
+}
+
 void ReaderSendRawIso14443a(int length, int flags, byte_t *data) {
     int bytes_received = 0;
     uint16_t receive_offset = 0;

@@ -794,6 +794,10 @@ void UsbPacketReceived(uint8_t *packet, int len)
         case CMD_ISO_14443A_READER_SEND_RAW:
             ReaderSendRawIso14443a(c->arg[0], c->arg[1], c->d.asBytes);
             break;
+        case CMD_ISO_14443A_RECEIVE_RAW_FROM_READER:
+            TagReceiveRawIso14443a();
+            break;
+
 
 		case CMD_READER_MIFARE:
             ReaderMifare(c->arg[0]);
