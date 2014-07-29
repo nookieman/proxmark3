@@ -2781,6 +2781,29 @@ void TagReceiveRawIso14443a() {
 //    LEDsoff();
 }
 
+void TagSendFrameIso14443a(int length, int flags, byte_t *data) {
+    int parity = 0;
+
+/* XXX: as CodeIso14443aAsTagPar() currently only supports full bytes no sending of bits is supported for now.
+
+    int length_bits = length;
+    // calculate effective size in bits depending on flags
+    if(! (flags & ISO14A_RAW_LENGTH_IN_BITS)) {
+         length_bits = length * 8;
+    }
+*/
+
+    // set parity according to flag of command
+    if(flags & ISO14A_RAW_PARITY) {
+//        DbpString("PARITY");
+        parity = GetParity(data, length);
+//    } else {
+//        DbpString("no PARITY");
+    }
+    CodeIso14443aAsTagPar(data, length, parity);
+    TagReceiveRawIso14443a();
+}
+
 void ReaderSendRawIso14443a(int length, int flags, byte_t *data) {
     int bytes_received = 0;
     uint16_t receive_offset = 0;

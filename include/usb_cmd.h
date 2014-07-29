@@ -115,6 +115,7 @@ typedef struct {
 #define CMD_EPA_PACE_COLLECT_NONCE                                        0x038A
 #define CMD_ISO_14443A_READER_SEND_RAW                                    0x038B
 #define CMD_ISO_14443A_RECEIVE_RAW_FROM_READER                            0x038C
+#define CMD_ISO_14443A_SEND_FRAME_AS_TAG                                  0x038D
 
 #define CMD_SNOOP_ICLASS                                                  0x0392
 #define CMD_SIMULATE_TAG_ICLASS                                           0x0393
