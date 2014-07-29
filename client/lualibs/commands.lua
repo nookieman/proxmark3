@@ -80,6 +80,7 @@ local _commands = {
 	CMD_ISO_14443A_READER_SEND_RAW =                                     0x038B,
 	CMD_ISO_14443A_RECEIVE_RAW_FROM_READER =                             0x038C,
 	CMD_ISO_14443A_SEND_FRAME_AS_TAG =                                   0x038D,
+	CMD_ISO_14443A_ANTICOLLISION_PASSIVE =                               0x038E,
 
 	CMD_SNOOP_ICLASS =                                                   0x0392,
 	CMD_SIMULATE_TAG_ICLASS =                                            0x0393,

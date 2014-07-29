@@ -34,6 +34,13 @@ typedef struct {
   } d;
 } PACKED UsbCommand;
 
+typedef struct {
+    uint8_t sak;
+    uint8_t atqa[2];
+    uint8_t uid_length;
+    uint8_t uid[10];
+} PACKED AnticollisionPayload;
+
 // For the bootloader
 #define CMD_DEVICE_INFO                                                   0x0000
 #define CMD_SETUP_WRITE                                                   0x0001
@@ -116,6 +123,7 @@ typedef struct {
 #define CMD_ISO_14443A_READER_SEND_RAW                                    0x038B
 #define CMD_ISO_14443A_RECEIVE_RAW_FROM_READER                            0x038C
 #define CMD_ISO_14443A_SEND_FRAME_AS_TAG                                  0x038D
+#define CMD_ISO_14443A_ANTICOLLISION_PASSIVE                              0x038E
 
 #define CMD_SNOOP_ICLASS                                                  0x0392
 #define CMD_SIMULATE_TAG_ICLASS                                           0x0393

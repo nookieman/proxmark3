@@ -2877,3 +2877,354 @@ void ReaderSendRawIso14443a(int length, int flags, byte_t *data) {
     //LEDsoff();
 }
 
+
+
+void ExecutePassiveAnticollisionIso14443a(byte_t* data)
+{
+	// Enable and clear the trace
+	iso14a_clear_trace();
+	iso14a_set_tracing(TRUE);
+
+    AnticollisionPayload *anticollisionPayload = (AnticollisionPayload *)data;
+
+	uint8_t sak;
+
+	// The first response contains the ATQA (note: bytes are transmitted in reverse order).
+	uint8_t response1[2];
+
+    sak = anticollisionPayload->sak;
+    response1[0] = anticollisionPayload->atqa[0];
+    response1[1] = anticollisionPayload->atqa[1];
+
+/*
+	switch (tagType) {
+		case 1: { // MIFARE Classic
+			// Says: I am Mifare 1k - original line
+			response1[0] = 0x04;
+			response1[1] = 0x00;
+			sak = 0x08;
+		} break;
+		case 2: { // MIFARE Ultralight
+			// Says: I am a stupid memory tag, no crypto
+			response1[0] = 0x04;
+			response1[1] = 0x00;
+			sak = 0x00;
+		} break;
+		case 3: { // MIFARE DESFire
+			// Says: I am a DESFire tag, ph33r me
+			response1[0] = 0x04;
+			response1[1] = 0x03;
+			sak = 0x20;
+		} break;
+		case 4: { // ISO/IEC 14443-4
+			// Says: I am a javacard (JCOP)
+			response1[0] = 0x04;
+			response1[1] = 0x00;
+			sak = 0x28;
+		} break;
+		default: {
+			Dbprintf("Error: unkown tagtype (%d)",tagType);
+			return;
+		} break;
+	}
+*/
+
+	// The second response contains the (mandatory) first 24 bits of the UID
+	uint8_t response2[5];
+
+	// Check if the uid uses the (optional) part
+	uint8_t response2a[5];
+
+
+    if(anticollisionPayload->uid_length == 7) {
+        response2[0] = 0x88;
+        response2[1] = anticollisionPayload->uid[0];
+        response2[2] = anticollisionPayload->uid[1];
+        response2[3] = anticollisionPayload->uid[2];
+        response2a[0] = anticollisionPayload->uid[3];
+        response2a[1] = anticollisionPayload->uid[4];
+        response2a[2] = anticollisionPayload->uid[5];
+        response2a[3] = anticollisionPayload->uid[6];
+        response2a[4] = response2a[0] ^ response2a[1] ^ response2a[2] ^ response2a[3];
+
+        // Configure the ATQA and SAK accordingly
+        response1[0] |= 0x40;
+        sak |= 0x04;
+    } else if(anticollisionPayload->uid_length == 4) {
+        response2[0] = anticollisionPayload->uid[0];
+        response2[1] = anticollisionPayload->uid[1];
+        response2[2] = anticollisionPayload->uid[2];
+        response2[3] = anticollisionPayload->uid[3];
+
+        // Configure the ATQA and SAK accordingly
+        response1[0] &= 0xBF;
+        sak &= 0xFB;
+    } else {
+        Dbprintf("ERROR: weird uid length: %d", anticollisionPayload->uid_length);
+    }
+
+/*
+	if (uid_2nd) {
+		response2[0] = 0x88;
+		num_to_bytes(uid_1st,3,response2+1);
+		num_to_bytes(uid_2nd,4,response2a);
+		response2a[4] = response2a[0] ^ response2a[1] ^ response2a[2] ^ response2a[3];
+
+		// Configure the ATQA and SAK accordingly
+		response1[0] |= 0x40;
+		sak |= 0x04;
+	} else {
+		num_to_bytes(uid_1st,4,response2);
+		// Configure the ATQA and SAK accordingly
+		response1[0] &= 0xBF;
+		sak &= 0xFB;
+	}
+*/
+
+	// Calculate the BitCountCheck (BCC) for the first 4 bytes of the UID.
+	response2[4] = response2[0] ^ response2[1] ^ response2[2] ^ response2[3];
+
+    Dbprintf("atqa: %02x %02x sak: %02x", response1[0], response1[1], sak);
+    Dbprintf("resp2: %02x %02x %02x %02x", response2[0], response2[1], response2[2], response2[3]);
+
+	// Prepare the mandatory SAK (for 4 and 7 byte UID)
+	uint8_t response3[3];
+	response3[0] = sak;
+	ComputeCrc14443(CRC_14443_A, response3, 1, &response3[1], &response3[2]);
+
+	// Prepare the optional second SAK (for 7 byte UID), drop the cascade bit
+	uint8_t response3a[3];
+	response3a[0] = sak & 0xFB;
+	ComputeCrc14443(CRC_14443_A, response3a, 1, &response3a[1], &response3a[2]);
+
+	uint8_t response5[] = { 0x00, 0x00, 0x00, 0x00 }; // Very random tag nonce
+	uint8_t response6[] = { 0x04, 0x58, 0x00, 0x02, 0x00, 0x00 }; // dummy ATS (pseudo-ATR), answer to RATS
+	ComputeCrc14443(CRC_14443_A, response6, 4, &response6[4], &response6[5]);
+
+	#define TAG_RESPONSE_COUNT 7
+	tag_response_info_t responses[TAG_RESPONSE_COUNT] = {
+		{ .response = response1,  .response_n = sizeof(response1)  },  // Answer to request - respond with card type
+		{ .response = response2,  .response_n = sizeof(response2)  },  // Anticollision cascade1 - respond with uid
+		{ .response = response2a, .response_n = sizeof(response2a) },  // Anticollision cascade2 - respond with 2nd half of uid if asked
+		{ .response = response3,  .response_n = sizeof(response3)  },  // Acknowledge select - cascade 1
+		{ .response = response3a, .response_n = sizeof(response3a) },  // Acknowledge select - cascade 2
+		{ .response = response5,  .response_n = sizeof(response5)  },  // Authentication answer (random nonce)
+		{ .response = response6,  .response_n = sizeof(response6)  },  // dummy ATS (pseudo-ATR), answer to RATS
+	};
+
+	// Allocate 512 bytes for the dynamic modulation, created when the reader queries for it
+	// Such a response is less time critical, so we can prepare them on the fly
+	#define DYNAMIC_RESPONSE_BUFFER_SIZE 64
+	#define DYNAMIC_MODULATION_BUFFER_SIZE 512
+	uint8_t dynamic_response_buffer[DYNAMIC_RESPONSE_BUFFER_SIZE];
+	uint8_t dynamic_modulation_buffer[DYNAMIC_MODULATION_BUFFER_SIZE];
+	tag_response_info_t dynamic_response_info = {
+		.response = dynamic_response_buffer,
+		.response_n = 0,
+		.modulation = dynamic_modulation_buffer,
+		.modulation_n = 0
+	};
+  
+	// Reset the offset pointer of the free buffer
+	reset_free_buffer();
+  
+	// Prepare the responses of the anticollision phase
+	// there will be not enough time to do this at the moment the reader sends it REQA
+	for (size_t i=0; i<TAG_RESPONSE_COUNT; i++) {
+		prepare_allocated_tag_modulation(&responses[i]);
+	}
+
+	uint8_t *receivedCmd = (((uint8_t *)BigBuf) + RECV_CMD_OFFSET);
+	int len = 0;
+
+	// To control where we are in the protocol
+	int order = 0;
+	int lastorder;
+
+	// Just to allow some checks
+	int happened = 0;
+	int happened2 = 0;
+	int cmdsRecvd = 0;
+
+	// We need to listen to the high-frequency, peak-detected path.
+	iso14443a_setup(FPGA_HF_ISO14443A_TAGSIM_LISTEN);
+
+	cmdsRecvd = 0;
+	tag_response_info_t* p_response;
+
+    int done = FALSE;
+
+	LED_A_ON();
+	while(!done) {
+		// Clean receive command buffer
+		
+		if(!GetIso14443aCommandFromReader(receivedCmd, &len, RECV_CMD_SIZE)) {
+			DbpString("Button press");
+			break;
+		}
+
+		p_response = NULL;
+		
+		// doob - added loads of debug strings so we can see what the reader is saying to us during the sim as hi14alist is not populated
+		// Okay, look at the command now.
+		lastorder = order;
+		if(receivedCmd[0] == 0x26) { // Received a REQUEST
+			//DbpString("Received a REQUEST");
+			p_response = &responses[0]; order = 1;
+		} else if(receivedCmd[0] == 0x52) { // Received a WAKEUP
+			//DbpString("Received a WAKEUP");
+			p_response = &responses[0]; order = 6;
+		} else if(receivedCmd[1] == 0x20 && receivedCmd[0] == 0x93) {	// Received request for UID (cascade 1)
+			//DbpString("Received request for UID (cascade 1)");
+			p_response = &responses[1]; order = 2;
+		} else if(receivedCmd[1] == 0x20 && receivedCmd[0] == 0x95) { // Received request for UID (cascade 2)
+			//DbpString("Received request for UID (cascade 2)");
+			p_response = &responses[2]; order = 20;
+		} else if(receivedCmd[1] == 0x70 && receivedCmd[0] == 0x93) {	// Received a SELECT (cascade 1)
+			//DbpString("Received a SELECT (cascade 1)");
+			p_response = &responses[3]; order = 3;
+		} else if(receivedCmd[1] == 0x70 && receivedCmd[0] == 0x95) {	// Received a SELECT (cascade 2)
+			//DbpString("Received a SELECT (cascade 2)");
+			p_response = &responses[4]; order = 30;
+		} else if(receivedCmd[0] == 0x30) {	// Received a (plain) READ
+			//DbpString("Received a (plain) READ");
+			EmSendCmdEx(data+(4*receivedCmd[0]),16,false);
+			 Dbprintf("Read request from reader: %x %x",receivedCmd[0],receivedCmd[1]);
+			// We already responded, do not send anything with the EmSendCmd14443aRaw() that is called below
+			p_response = NULL;
+		} else if(receivedCmd[0] == 0x50) {	// Received a HALT
+			//DbpString("Reader requested we HALT!:");
+			if (tracing) {
+				LogTrace(receivedCmd, Uart.len, Uart.startTime*16 - DELAY_AIR2ARM_AS_TAG, Uart.parityBits, TRUE);
+				LogTrace(NULL, 0, Uart.endTime*16 - DELAY_AIR2ARM_AS_TAG, 0, TRUE);
+			}
+			p_response = NULL;
+		} else if(receivedCmd[0] == 0x60 || receivedCmd[0] == 0x61) {	// Received an authentication request
+			DbpString("Received an authentication request");
+			p_response = &responses[5]; order = 7;
+            cmd_send(CMD_ACK, len, 0, 0, receivedCmd, len);
+		} else if(receivedCmd[0] == 0xE0) {	// Received a RATS request
+			//DbpString("Received a RATS request");
+//			if (tagType == 1 || tagType == 2) {	// RATS not supported
+				EmSend4bit(CARD_NACK_NA);
+				p_response = NULL;
+//			} else {
+//				p_response = &responses[6]; order = 70;
+//			}
+		} else if (order == 7 && len == 8) { // Received authentication request
+			//DbpString("Received authentication request");
+			if (tracing) {
+				LogTrace(receivedCmd, Uart.len, Uart.startTime*16 - DELAY_AIR2ARM_AS_TAG, Uart.parityBits, TRUE);
+				LogTrace(NULL, 0, Uart.endTime*16 - DELAY_AIR2ARM_AS_TAG, 0, TRUE);
+			}
+			uint32_t nr = bytes_to_num(receivedCmd,4);
+			uint32_t ar = bytes_to_num(receivedCmd+4,4);
+			Dbprintf("Auth attempt {nr}{ar}: %08x %08x",nr,ar);
+		} else {
+			// Check for ISO 14443A-4 compliant commands, look at left nibble
+			switch (receivedCmd[0]) {
+
+				case 0x0B:
+				case 0x0A: { // IBlock (command)
+				  dynamic_response_info.response[0] = receivedCmd[0];
+				  dynamic_response_info.response[1] = 0x00;
+				  dynamic_response_info.response[2] = 0x90;
+				  dynamic_response_info.response[3] = 0x00;
+				  dynamic_response_info.response_n = 4;
+				} break;
+
+				case 0x1A:
+				case 0x1B: { // Chaining command
+				  dynamic_response_info.response[0] = 0xaa | ((receivedCmd[0]) & 1);
+				  dynamic_response_info.response_n = 2;
+				} break;
+
+				case 0xaa:
+				case 0xbb: {
+				  dynamic_response_info.response[0] = receivedCmd[0] ^ 0x11;
+				  dynamic_response_info.response_n = 2;
+				} break;
+				  
+				case 0xBA: { //
+				  memcpy(dynamic_response_info.response,"\xAB\x00",2);
+				  dynamic_response_info.response_n = 2;
+				} break;
+
+				case 0xCA:
+				case 0xC2: { // Readers sends deselect command
+				  memcpy(dynamic_response_info.response,"\xCA\x00",2);
+				  dynamic_response_info.response_n = 2;
+				} break;
+
+				default: {
+					// Never seen this command before
+					if (tracing) {
+						LogTrace(receivedCmd, Uart.len, Uart.startTime*16 - DELAY_AIR2ARM_AS_TAG, Uart.parityBits, TRUE);
+						LogTrace(NULL, 0, Uart.endTime*16 - DELAY_AIR2ARM_AS_TAG, 0, TRUE);
+					}
+					Dbprintf("Received unknown command '%02X' (len=%d):", receivedCmd[0], len);
+					Dbhexdump(len,receivedCmd,false);
+					// Do not respond
+					dynamic_response_info.response_n = 0;
+                    cmd_send(CMD_ACK, len, 0, 0, receivedCmd, len);
+                    p_response = NULL;
+                    done = TRUE; //TODO: correctly leave function
+				} break;
+			}
+      
+			if (dynamic_response_info.response_n > 0) {
+				// Copy the CID from the reader query
+				dynamic_response_info.response[1] = receivedCmd[1];
+
+				// Add CRC bytes, always used in ISO 14443A-4 compliant cards
+				AppendCrc14443a(dynamic_response_info.response,dynamic_response_info.response_n);
+				dynamic_response_info.response_n += 2;
+        
+				if (prepare_tag_modulation(&dynamic_response_info,DYNAMIC_MODULATION_BUFFER_SIZE) == false) {
+					Dbprintf("Error preparing tag response");
+					if (tracing) {
+						LogTrace(receivedCmd, Uart.len, Uart.startTime*16 - DELAY_AIR2ARM_AS_TAG, Uart.parityBits, TRUE);
+						LogTrace(NULL, 0, Uart.endTime*16 - DELAY_AIR2ARM_AS_TAG, 0, TRUE);
+					}
+					break;
+				}
+				p_response = &dynamic_response_info;
+			}
+		}
+
+		// Count number of wakeups received after a halt
+		if(order == 6 && lastorder == 5) { happened++; }
+
+		// Count number of other messages after a halt
+		if(order != 6 && lastorder == 5) { happened2++; }
+
+		if(cmdsRecvd > 999) {
+			DbpString("1000 commands later...");
+			break;
+		}
+		cmdsRecvd++;
+
+		if (p_response != NULL) {
+			EmSendCmd14443aRaw(p_response->modulation, p_response->modulation_n, receivedCmd[0] == 0x52);
+			// do the tracing for the previous reader request and this tag answer:
+			EmLogTrace(Uart.output, 
+						Uart.len, 
+						Uart.startTime*16 - DELAY_AIR2ARM_AS_TAG, 
+						Uart.endTime*16 - DELAY_AIR2ARM_AS_TAG, 
+						Uart.parityBits,
+						p_response->response, 
+						p_response->response_n,
+						LastTimeProxToAirStart*16 + DELAY_ARM2AIR_AS_TAG,
+						(LastTimeProxToAirStart + p_response->ProxToAirDuration)*16 + DELAY_ARM2AIR_AS_TAG, 
+						SwapBits(GetParity(p_response->response, p_response->response_n), p_response->response_n));
+		}
+		
+		if (!tracing) {
+			Dbprintf("Trace Full. Simulation stopped.");
+			break;
+		}
+	}
+
+	Dbprintf("%x %x %x", happened, happened2, cmdsRecvd);
+	LED_A_OFF();
+}

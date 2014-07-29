@@ -159,6 +159,7 @@ void ReaderIso14443a(UsbCommand * c);
 void ReaderSendRawIso14443a(int length, int flags, byte_t* data);
 void TagReceiveRawIso14443a();
 void TagSendFrameIso14443a(int length, int flags, byte_t *data);
+void ExecutePassiveAnticollisionIso14443a(byte_t* data);
 
 // Also used in iclass.c
 bool RAMFUNC LogTrace(const uint8_t * btBytes, uint8_t iLen, uint32_t iSamples, uint32_t dwParity, bool readerToTag);
